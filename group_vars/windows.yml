@@ -1,6 +1,8 @@
 ---
 ansible_connection: ssh
-ansible_shell_type: powershell
+ansible_shell_type: cmd
+ansible_become_method: runas
+ansible_remote_tmp: 'C:\Temp\ansible'
 # ansible_winrm_transport: basic
 # ansible_winrm_server_cert_validation: ignore
 # ansible_winrm_port: 5985
@@ -8,4 +10,3 @@ ansible_shell_type: powershell
 # For HTTPS (more secure):
 # ansible_winrm_port: 5986
 # ansible_winrm_scheme: https
-ansible_become_method: runas
