@@ -22,9 +22,8 @@ The project automates Windows Update management with the following key features:
 
 ### Playbooks
 
-#### Main Update Playbooks
-- **`check-windows-updates.yml`** - Comprehensive update management with detailed logging and both PowerShell and Ansible module approaches
-- **`windows-update-defender-fixed.yml`** - Streamlined update process with specific focus on Defender signature handling
+#### Main Update Playbook
+- **`process-windows-updates.yml`** - Comprehensive Windows update management with Wake-on-LAN, Defender handling, and system updates. AWX-compatible with Wake-on-LAN disabled by default (use `--tags never` to skip WOL or `--tags all` to include it)
 
 #### Utility Playbooks
 - **`fix-windows-update-remote.yml`** - Troubleshooting playbook for fixing Windows Update issues (clears cache, resets services, re-registers components)
@@ -128,13 +127,22 @@ ansible_become_method: runas
 
 Run the main update playbook:
 ```bash
-ansible-playbook check-windows-updates.yml
+ansible-playbook process-windows-updates.yml
 ```
 
-Or use the streamlined version:
-```bash
-ansible-playbook windows-update-defender-fixed.yml
-```
+#### Wake-on-LAN Control
+
+The Wake-on-LAN task is tagged with `never` to make it AWX-compatible by default:
+
+- **Skip Wake-on-LAN** (default behavior, AWX-compatible):
+  ```bash
+  ansible-playbook process-windows-updates.yml
+  ```
+
+- **Include Wake-on-LAN** (for local execution):
+  ```bash
+  ansible-playbook process-windows-updates.yml --tags all
+  ```
 
 ### Troubleshooting Windows Updates
 
@@ -163,7 +171,7 @@ To wake your Windows PC manually:
 
 To run playbooks on specific machines:
 ```bash
-ansible-playbook check-windows-updates.yml --limit your-pc-name
+ansible-playbook process-windows-updates.yml --limit your-pc-name
 ```
 
 ## Playbook Features
@@ -188,6 +196,26 @@ ansible-playbook check-windows-updates.yml --limit your-pc-name
 - **Update Rollups**
 - **Definition Updates** (Windows Defender)
 - **General Updates**
+
+## AWX/Ansible Tower Compatibility
+
+This project is designed to work with both standalone Ansible and AWX/Ansible Tower environments:
+
+### Wake-on-LAN Handling
+- The Wake-on-LAN task is tagged with `never` by default
+- This prevents execution in AWX environments where WOL proxies may not be available
+- The task includes a comment explaining it's set to never run by default for AWX compatibility
+
+### Execution in Different Environments
+
+**In AWX/Tower:**
+- The playbook runs without Wake-on-LAN by default
+- Assumes target machines are already powered on and accessible
+- All other functionality remains intact
+
+**Locally/Standalone:**
+- Use `--tags all` to include Wake-on-LAN functionality
+- Requires `wakeonlan` utility installed on the control machine
 
 ## Configuration Options
 

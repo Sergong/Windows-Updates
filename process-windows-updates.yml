@@ -1,5 +1,6 @@
 ---
-# This playbook depends on the wakeonlan utility to be installed on the ansible host
+# The first task in this playbook depends on the wakeonlan utility to be installed on the ansible host
+# It is set to never run by default, as it would require WOL Proxies when running in AWX.
 - name: Comprehensive Windows 11 Update Management
   hosts: windows
   gather_facts: false
@@ -28,6 +29,8 @@
         wakeonlan -p 7 $MAC
       changed_when: false
       run_once: true
+      tags:
+        - never
 
     - name: Wait for system to be responsive
       ansible.builtin.wait_for_connection:
