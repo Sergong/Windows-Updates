@@ -1,0 +1,137 @@
+---
+- name: Fix Windows Update Issues Remotely
+  hosts: windows
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Stop Windows Update services # noqa: ignore-errors
+      ansible.windows.win_service:
+        name: "{{ item }}"
+        state: stopped
+        force: true
+      loop:
+        - wuauserv
+        - cryptSvc
+        - bits
+        - msiserver
+      ignore_errors: true
+
+    - name: Clear Windows Update cache directories # noqa: ignore-errors
+      ansible.windows.win_file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - C:\Windows\SoftwareDistribution
+        - C:\Windows\System32\catroot2
+      ignore_errors: true
+
+    - name: Recreate cache directories
+      ansible.windows.win_file:
+        path: "{{ item }}"
+        state: directory
+      loop:
+        - C:\Windows\SoftwareDistribution
+        - C:\Windows\System32\catroot2
+
+    - name: Reset Windows Update registry keys # noqa: ignore-errors
+      ansible.windows.win_regedit:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate
+        - HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Services\Pending
+      ignore_errors: true
+
+    - name: Re-register Windows Update components
+      ansible.windows.win_shell: |
+        $dlls = @(
+          'atl.dll', 'urlmon.dll', 'mshtml.dll', 'shdocvw.dll', 'browseui.dll',
+          'jscript.dll', 'vbscript.dll', 'scrrun.dll', 'msxml.dll', 'msxml3.dll',
+          'msxml6.dll', 'actxprxy.dll', 'softpub.dll', 'wintrust.dll', 'dssenh.dll',
+          'rsaenh.dll', 'gpkcsp.dll', 'sccbase.dll', 'slbcsp.dll', 'cryptdlg.dll'
+        )
+        foreach ($dll in $dlls) {
+          try {
+            regsvr32.exe /s $dll
+            Write-Output "Successfully registered $dll"
+          } catch {
+            Write-Output "Failed to register $dll"
+          }
+        }
+      register: regsvr_result
+
+    - name: Display DLL registration results
+      ansible.builtin.debug:
+        var: regsvr_result.stdout_lines
+
+    - name: Reset proxy settings
+      ansible.windows.win_shell: netsh winhttp reset proxy
+      register: proxy_reset
+
+    - name: Start Windows Update services # noqa: ignore-errors
+      ansible.windows.win_service:
+        name: "{{ item }}"
+        state: started
+        start_mode: auto
+      loop:
+        - cryptSvc
+        - bits
+        - msiserver
+        - wuauserv
+      ignore_errors: true
+
+    - name: Test connectivity to Windows Update servers
+      ansible.windows.win_shell: |
+        $urls = @(
+          'http://windowsupdate.microsoft.com',
+          'https://update.microsoft.com',
+          'https://fe2.update.microsoft.com'
+        )
+        foreach ($url in $urls) {
+          try {
+            $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 10
+            Write-Output "✓ $url - Status: $($response.StatusCode)"
+          } catch {
+            Write-Output "✗ $url - Error: $($_.Exception.Message)"
+          }
+        }
+      register: connectivity_test
+
+    - name: Display connectivity test results
+      ansible.builtin.debug:
+        var: connectivity_test.stdout_lines
+
+    - name: Check final service status
+      ansible.windows.win_service:
+        name: "{{ item }}"
+      loop:
+        - wuauserv
+        - cryptSvc
+        - bits
+        - msiserver
+      register: service_status
+
+    - name: Display service status
+      ansible.builtin.debug:
+        msg: "{{ item.item }}: {{ item.state }}"
+      loop: "{{ service_status.results }}"
+
+    - name: Attempt to search for updates after fix
+      ansible.windows.win_updates:
+        state: searched
+        category_names:
+          - CriticalUpdates
+          - SecurityUpdates
+      register: post_fix_updates
+      ignore_errors: true
+
+    - name: Display post-fix update search results
+      ansible.builtin.debug:
+        msg: |
+          Update search after fix:
+          - Found updates: {{ post_fix_updates.found_update_count | default('Error occurred') }}
+          - Status: {{ 'Success' if not post_fix_updates.failed else 'Failed' }}
+          {% if post_fix_updates.failed %}
+          - Error: {{ post_fix_updates.msg | default('Unknown error') }}
+          {% endif %}

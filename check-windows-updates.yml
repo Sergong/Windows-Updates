@@ -1,0 +1,321 @@
+---
+# This playbook depends on the wakeonlan utility to be installed on the ansible host
+- name: Comprehensive Windows 11 Update Management
+  hosts: windows
+  gather_facts: false
+
+  tasks:
+    - name: Wake up the PC first # noqa: command-instead-of-shell run-once[task]
+      delegate_to: localhost
+      ansible.builtin.shell: |
+        MAC={{ mac_address }}
+        IP={{ ip_address }}
+        BROADCAST={{ broadcast }}
+
+        echo "Attempting to wake PC at $IP with MAC $MAC..."
+
+        # Try multiple methods
+        echo "Method 1: Direct IP with wakeonlan"
+        wakeonlan -i $IP $MAC
+
+        echo "Method 2: Broadcast with wakeonlan"
+        wakeonlan -i $BROADCAST $MAC
+
+        echo "Method 3: Default broadcast with wakeonlan"
+        wakeonlan $MAC
+
+        echo "Method 4: Port 7 with wakeonlan"
+        wakeonlan -p 7 $MAC
+      changed_when: false
+      run_once: true
+
+    - name: Wait for system to be responsive
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+
+    - name: Gather Windows facts
+      ansible.builtin.setup:
+
+    - name: Display system information
+      ansible.builtin.debug:
+        msg: |
+          Computer: {{ ansible_hostname }}
+          OS: {{ ansible_os_name }} ({{ ansible_distribution_version }})
+          Architecture: {{ ansible_architecture }}
+          Last Boot: {{ ansible_lastboot }}
+          OS Family: {{ ansible_os_family }}
+          Installation Type: {{ ansible_os_installation_type }}
+
+    - name: Temporarily disable Windows Defender real-time protection
+      ansible.windows.win_shell: |
+        try {
+          Set-MpPreference -DisableRealtimeMonitoring $true
+          Write-Output "Defender real-time protection disabled"
+        } catch {
+          Write-Output "Could not disable Defender: $($_.Exception.Message)"
+        }
+      register: defender_disable
+      become: true
+      ignore_errors: true
+
+    - name: Display Defender disable result
+      ansible.builtin.debug:
+        var: defender_disable.stdout_lines
+
+    - name: Stop Windows Update service temporarily # noqa: ignore-errors
+      ansible.windows.win_service:
+        name: "{{ item }}"
+        state: stopped
+      loop:
+        - wuauserv
+      become: true
+      ignore_errors: true
+
+    - name: Wait for services to fully stop
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: Start Windows Update service
+      ansible.windows.win_service:
+        name: wuauserv
+        state: started
+        start_mode: auto
+      become: true
+
+# ------------------------- PowerShell Way ----------------------------------
+
+
+    # - name: Check currently available Windows Updates (PowerShell)
+    #   ansible.windows.win_shell: |
+    #     $UpdateSession = New-Object -ComObject Microsoft.Update.Session
+    #     $UpdateSearcher = $UpdateSession.CreateupdateSearcher()
+    #     $SearchResult = $UpdateSearcher.Search("IsInstalled=0 and Type='Software'")
+    #     $SearchResult.Updates | Select-Object Title, Description, Type, MaxDownloadSize,  | Format-List
+    #   register: available_updates
+    #   become: true
+
+    # - name: Display available updates (PowerShell)
+    #   ansible.builtin.debug:
+    #     msg: |
+    #       {{ available_updates.stdout }}
+
+
+# ----------------- Ansible Module way ------------------------------------
+
+    - name: Check currently available Windows Updates (Ansible module)
+      ansible.windows.win_updates:
+        state: searched
+        category_names:
+          - CriticalUpdates
+          - SecurityUpdates
+          - UpdateRollups
+          - Updates
+          - DefinitionUpdates
+      register: available_updates
+      become: true
+
+    - name: Separate Defender updates from other updates
+      ansible.builtin.set_fact:
+        defender_updates: "{{ available_updates.updates | dict2items | selectattr('value.categories', 'search', 'Definition Updates') | list }}"
+        other_updates: "{{ available_updates.updates | dict2items | rejectattr('value.categories', 'search', 'Definition Updates') | list }}"
+
+    - name: Show Defender Updates
+      ansible.builtin.debug:
+        msg: |
+          {{ defender_updates }}
+      when: defender_updates | length > 0
+
+    - name: Show Other Updates
+      ansible.builtin.debug:
+        msg: |
+          {{ other_updates }}
+      when: other_updates | length > 0
+
+# ------------------------- PowerShell Way ----------------------------------
+
+    # - name: Update Defender signatures via PowerShell
+    #   ansible.windows.win_shell: |
+    #     try {
+    #       Update-MpSignature -UpdateSource MicrosoftUpdateServer
+    #       Write-Output "Defender signatures updated successfully via PowerShell"
+    #     } catch {
+    #       Write-Output "PowerShell signature update failed: $($_.Exception.Message)"
+    #     }
+    #   register: defender_ps_update
+    #   when:
+    #     - defender_updates | length > 0
+    #   become: true
+    #   ignore_errors: true
+
+    # - name: Display Defender update results
+    #   ansible.builtin.debug:
+    #     msg: |
+    #       Defender updates: {{ 'Success' if not defender_ps_update.failed else 'Failed' }}
+    #       {% if defender_ps_update.failed %}
+    #       {{ defender_ps_update.stderr }}
+    #       {% else %}
+    #       {{ defender_ps_update.stdout }}
+    #       {% endif %}
+    #   when: defender_updates | length > 0
+
+# ----------------- Ansible Module way ------------------------------------
+    - name: Update Defender signatures
+      ansible.windows.win_updates:
+        category_names:
+          - DefinitionUpdates
+        reboot: false
+      register: defender_result
+      when: defender_updates | length > 0
+      become: true
+      ignore_errors: true
+
+    - name: Display Defender update results
+      ansible.builtin.debug:
+        msg: |
+          Defender updates: {{ 'Success' if not defender_result.failed else 'Failed' }}
+          {% if defender_result.failed %}
+          Error: {{ defender_result.msg | default('Unknown error') }}
+          {% else %}
+          Installed: {{ defender_result.installed_update_count | default(0) }}
+          {% endif %}
+      when: defender_updates | length > 0
+
+# ------------------------- PowerShell Way ----------------------------------
+    # - name: Install other updates using PowerShell
+    #   ansible.windows.win_shell: |
+    #     $UpdateSession = New-Object -ComObject Microsoft.Update.Session
+    #     $UpdateSearcher = $UpdateSession.CreateupdateSearcher()
+
+    #     # Get the update IDs from Ansible facts
+    #     $UpdateIDs = @(
+    #     {% for update in other_updates %}
+    #       "{{ update.value.id }}",
+    #     {% endfor %}
+    #     )
+
+    #     if ($UpdateIDs.Count -eq 0) {
+    #         Write-Output "No other updates to install"
+    #         exit 0
+    #     }
+
+    #     Write-Output "Found {{ other_updates | length }} other updates to install"
+    #     Write-Output "=== INSTALLING OTHER UPDATES ==="
+
+    #     # Search for all available updates
+    #     $SearchResult = $UpdateSearcher.Search("IsInstalled=0 and Type='Software'")
+
+    #     # Filter to only the updates we want to install
+    #     $UpdatesToDownload = New-Object -ComObject Microsoft.Update.UpdateColl
+    #     foreach ($Update in $SearchResult.Updates) {
+    #         if ($UpdateIDs -contains $Update.Identity.UpdateID) {
+    #             Write-Output "Preparing to install: $($Update.Title)"
+    #             $UpdatesToDownload.Add($Update) | Out-Null
+    #         }
+    #     }
+
+    #     if ($UpdatesToDownload.Count -gt 0) {
+    #         Write-Output "Downloading $($UpdatesToDownload.Count) updates..."
+    #         $Downloader = $UpdateSession.CreateUpdateDownloader()
+    #         $Downloader.Updates = $UpdatesToDownload
+    #         $DownloadResult = $Downloader.Download()
+
+    #         if ($DownloadResult.ResultCode -eq 2) {
+    #             Write-Output "Updates downloaded successfully"
+
+    #             Write-Output "Installing updates..."
+    #             $UpdatesToInstall = New-Object -ComObject Microsoft.Update.UpdateColl
+    #             foreach ($Update in $UpdatesToDownload) {
+    #                 if ($Update.IsDownloaded) {
+    #                     $UpdatesToInstall.Add($Update) | Out-Null
+    #                 }
+    #             }
+
+    #             $Installer = $UpdateSession.CreateUpdateInstaller()
+    #             $Installer.Updates = $UpdatesToInstall
+    #             $InstallResult = $Installer.Install()
+
+    #             Write-Output "Installation completed with result code: $($InstallResult.ResultCode)"
+    #             Write-Output "Successfully installed: $($InstallResult.GetUpdateResult(0).ResultCode)"
+
+    #             if ($InstallResult.RebootRequired) {
+    #                 Write-Output "REBOOT REQUIRED after updates installation"
+    #             }
+    #         } else {
+    #             Write-Output "Failed to download updates. Result code: $($DownloadResult.ResultCode)"
+    #         }
+    #     } else {
+    #         Write-Output "No matching updates found to install"
+    #     }
+    #   register: install_updates_result
+    #   when: other_updates | length > 0
+    #   become: true
+
+# ----------------- Ansible Module way ------------------------------------
+    - name: Install other critical and security updates
+      ansible.windows.win_updates:
+        category_names:
+          - CriticalUpdates
+          - SecurityUpdates
+          - UpdateRollups
+          - Updates
+        reboot: false
+      register: other_result
+      when: other_updates | length > 0
+      become: true
+      ignore_errors: true
+
+    - name: Display other update results
+      ansible.builtin.debug:
+        msg: |
+          Other updates: {{ 'Success' if not other_result.failed else 'Failed' }}
+          {% if other_result.failed %}
+          Error: {{ other_result.msg | default('Unknown error') }}
+          {% else %}
+          Installed: {{ other_result.installed_update_count | default(0) }}
+          {% endif %}
+      when: other_updates | length > 0
+
+    - name: Re-enable Windows Defender real-time protection
+      ansible.windows.win_shell: |
+        try {
+          Set-MpPreference -DisableRealtimeMonitoring $false
+          Write-Output "Defender real-time protection re-enabled"
+        } catch {
+          Write-Output "Could not re-enable Defender: $($_.Exception.Message)"
+        }
+      register: defender_enable
+      become: true
+      ignore_errors: true
+
+    - name: Check if reboot is required
+      ansible.builtin.set_fact:
+        reboot_needed: "{{ (other_result.reboot_required | default(false)) }}"
+
+    - name: Reboot if required
+      ansible.windows.win_reboot:
+        reboot_timeout: "{{ reboot_timeout }}"
+        post_reboot_delay: 60
+      when: reboot_needed | bool
+      become: true
+
+    - name: Wait for system to be responsive after reboot
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+      when: reboot_needed | bool
+
+    - name: Final update check
+      ansible.windows.win_updates:
+        state: searched
+      register: final_check
+      become: true
+
+    - name: Final status
+      ansible.builtin.debug:
+        msg: |
+          Update Summary:
+          - Defender updates processed: {{ defender_updates | length }}
+          - Other updates processed: {{ other_updates | length }}
+          - Remaining updates: {{ final_check.found_update_count }}
+          - System rebooted: {{ reboot_needed | bool }}
+          - System uptime: {{ ansible_uptime_seconds // 3600 }} hours
+          - Last update run: {{ ansible_date_time.iso8601 }}

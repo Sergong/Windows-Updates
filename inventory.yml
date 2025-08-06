@@ -1,0 +1,7 @@
+windows:
+  hosts:
+    winacemagician:
+      ansible_host: 192.168.1.44
+      mac_address: "E0:75:26:89:AB:BB"
+      ip_address: "192.168.1.44"
+      broadcast: "192.168.1.255"
