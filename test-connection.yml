@@ -1,0 +1,17 @@
+- name: Windows 11 Test playbook
+  hosts: windows
+  gather_facts: false
+
+  tasks:
+    - name: Gather Windows facts
+      ansible.builtin.setup:
+
+    - name: Display system information
+      ansible.builtin.debug:
+        msg: |
+          Computer: {{ ansible_hostname }}
+          OS: {{ ansible_os_name }} ({{ ansible_distribution_version }})
+          Architecture: {{ ansible_architecture }}
+          Last Boot: {{ ansible_lastboot }}
+          OS Family: {{ ansible_os_family }}
+          Installation Type: {{ ansible_os_installation_type }}
