@@ -21,5 +21,5 @@ wakeonlan $MAC
 echo "Method 4: Port 7 with wakeonlan"
 wakeonlan -p 7 $MAC
 
-echo "Wake-on-LAN packets sent. Waiting 30 seconds before pinging $IP"
-sleep 30 && ping -c 3 $IP
+echo "Wake-on-LAN packets sent. Waiting 40 seconds before pinging $IP"
+sleep 40 && ping -c 3 $IP
