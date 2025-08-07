@@ -64,7 +64,7 @@ The project automates Windows Update management with the following key features:
    ```bash
    export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
    ```
-   This is already configured in `ansible.cfg` but may be needed for your shell environment.
+   This is configured in `ansible.cfg` in the `[local]` section but since this is not a valid ansible config file section it is ignored and you will need to export this env var specifically for your shell environment.
 
 ### On Windows Target Machines
 1. **PowerShell execution policy** set to allow script execution
@@ -109,8 +109,9 @@ Edit `group_vars/windows.yml` based on your chosen setup:
 #### For SSH (Recommended):
 ```yaml
 ansible_connection: ssh
-ansible_shell_type: powershell
+ansible_shell_type: cmd
 ansible_become_method: runas
+ansible_remote_tmp: 'C:\Temp\ansible' # Ensure this directory exists!
 ```
 
 #### For WinRM:
@@ -199,8 +200,8 @@ ansible-playbook test-connection.yml --limit your-pc-name
 5. **Restart Windows Update service**
 6. **Search for available updates**
 7. **Separate Defender updates from system updates**
-8. **Install Defender signatures** (via PowerShell or Ansible module)
-9. **Install critical and security updates**
+8. **Install Defender signatures** (via PowerShell or Ansible module - currently Ansible is uncommented and thus used)
+9. **Install critical and security updates** (via PowerShell or Ansible module - currently Ansible is uncommented and thus used)
 10. **Re-enable Windows Defender**
 11. **Reboot if required**
 12. **Perform final verification**
@@ -229,7 +230,7 @@ This project is designed to work with both standalone Ansible and AWX/Ansible To
 - All other functionality remains intact
 
 **Locally/Standalone:**
-- Use `--tags all` to include Wake-on-LAN functionality
+- Use `--tags always` to include Wake-on-LAN functionality
 - Requires `wakeonlan` utility installed on the control machine
 
 ## Configuration Options
@@ -244,7 +245,7 @@ The `ansible.cfg` file includes optimizations:
 - YAML output formatting
 - Disabled deprecation warnings
 - SSH pipelining for performance
-- macOS Python 3.13 compatibility fixes
+- `[local]` section for macOS Python 3.13 compatibility fix, but this is ignored by ansible, so export this as an environment var.
 
 ## Security Considerations
 
