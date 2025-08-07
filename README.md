@@ -289,6 +289,33 @@ When contributing:
 3. Update documentation for new features
 4. Consider security implications of changes
 
+## Tested Environments
+
+1. macOS
+```
+ansible [core 2.18.7]
+  config file = /Volumes/1TB_Disk/Projects/Windows-Updates/ansible.cfg
+  configured module search path = ['/Users/<user>/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
+  ansible python module location = /Users/<user>/Library/Python/3.13/lib/python/site-packages/ansible
+  ansible collection location = /Users/<user>/.ansible/collections:/usr/share/ansible/collections
+  executable location = /Users/<user>/Library/Python/3.13/bin/ansible
+  python version = 3.13.5 (main, Jun 11 2025, 15:36:57) [Clang 17.0.0 (clang-1700.0.13.3)] (/opt/homebrew/opt/python@3.13/bin/python3.13)
+  jinja version = 3.1.6
+  libyaml = True
+```
+2. AWX
+```
+______________ 
+<  AWX 24.6.1  >
+ -------------- 
+          \
+          \   ^__^
+              (oo)\_______
+              (__)      A )\
+                  ||----w |
+                  ||     ||
+```
+
 ## License
 
 This project is provided as-is for educational and automation purposes. Use at your own risk and ensure you understand the security implications of remote Windows management.
