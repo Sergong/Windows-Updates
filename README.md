@@ -16,6 +16,7 @@ The project automates Windows Update management with the following key features:
 
 ### Core Ansible Files
 - **`ansible.cfg`** - Ansible configuration with macOS Python 3.13 compatibility fixes
+- **`ansible.cfg.example`** - Complete example configuration file showing all available Ansible options
 - **`inventory.yml`** - Host inventory defining Windows machines to manage
 - **`group_vars/windows.yml`** - Group variables for Windows hosts (connection settings)
 - **`host_vars/winacemagician.yml`** - Host-specific variables (if exists)
@@ -27,6 +28,7 @@ The project automates Windows Update management with the following key features:
 
 #### Utility Playbooks
 - **`fix-windows-update-remote.yml`** - Troubleshooting playbook for fixing Windows Update issues (clears cache, resets services, re-registers components)
+- **`test-connection.yml`** - Simple test playbook to verify Ansible connectivity and gather basic system information from Windows hosts
 
 ### Windows Setup Scripts
 - **`setup-winrm.ps1`** - PowerShell script to configure WinRM on Windows for Ansible management
@@ -160,6 +162,18 @@ This playbook will:
 - Restart services
 - Test connectivity to Microsoft update servers
 
+### Testing Connectivity
+
+To verify Ansible can connect to your Windows machines and gather basic information:
+```bash
+ansible-playbook test-connection.yml
+```
+
+This will:
+- Test connection to all Windows hosts in inventory
+- Gather system facts (OS, architecture, uptime, etc.)
+- Display basic system information
+
 ### Manual Wake-on-LAN
 
 To wake your Windows PC manually:
@@ -172,6 +186,7 @@ To wake your Windows PC manually:
 To run playbooks on specific machines:
 ```bash
 ansible-playbook process-windows-updates.yml --limit your-pc-name
+ansible-playbook test-connection.yml --limit your-pc-name
 ```
 
 ## Playbook Features
